@@ -5,13 +5,21 @@ from lib.db.models.file_parameter import DbFileParameter
 from lib.db.models.parameter_type import DbParameterType
 
 
-def delete_parameter_files(db: Database, file_id: int):
+def delete_file_parameters(db: Database, file_id: int):
     """
     Delete all parameter_files associated to a file_id
     """
 
     return db.execute(delete(DbFileParameter)
         .where(DbFileParameter.file_id == file_id))
+
+def try_get_pic_paths_with_file_id(db: Database, file_id: int):
+    """
+    Get mri bids png paths with file_id
+    """
+
+    return db.execute(select(DbFileParameter.value)
+        .where(DbFileParameter.file_id == file.id))
 
 def delete_file_parameter(db: Database, file_parameter_id: int):
     """

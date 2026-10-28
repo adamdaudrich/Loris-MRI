@@ -51,13 +51,19 @@ def try_get_file_with_path(db: Database, path: Path) -> DbFile | None:
         .where(DbFile.path == path)
     ).scalar_one_or_none()
 
+def try_get_path_with_file_id(db: Database, file_id: int) -> DbFile | None:
+    """
+    Get the bids file path from the database using its file_id
+    """
+
+    return db.execute(select(DbFile.path).where(DbFile.id == file_id))
+
 
 def try_get_file_with_hash(db: Database, file_hash: str) -> DbFile | None:
     """
     Get an imaging file from the database using its BLAKE2b or MD5 hash, or return `None` if no
     imaging file is found.
     """
-
     return db.execute(select(DbFile)
         .join(DbFile.parameters)
         .join(DbFileParameter.type)
