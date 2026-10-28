@@ -4,6 +4,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as Database
 
 from lib.db.models.file import DbFile
+from lib.db.models.candidate import DbCandidate
+from lib.db.models.session import DbSession
 from lib.db.models.file_parameter import DbFileParameter
 from lib.db.models.parameter_type import DbParameterType
 
@@ -63,11 +65,20 @@ def try_get_file_with_hash(db: Database, file_hash: str) -> DbFile | None:
         .where(DbFileParameter.value == file_hash)
     ).scalar_one_or_none()
 
+def get_file_ids_with_pscid(db: Database, pscid: str) -> list[int]:
+    """
+    Get the IDs of all the imaging files associated with a given PSCID.
+    """
+
+    return list(db.execute(select(DbFile.id)
+        .join(DbSession, DbFile.session_id == DbSession.id)
+        .join(DbCandidate, DbSession.cand_id == DbCandidate.cand_id)
+        .where(DbCandidate.psc_id == pscid)
+    ).scalars().all())
 
 def delete_file(db: Database, file_id: int):
     """
     Delete from the database a file entry based on a file ID.
     """
 
-    db.execute(delete(DbFile)
-       .where(DbFile.id == file_id))
+    return db.execute(delete(DbFile).where(DbFile.id == file_id))

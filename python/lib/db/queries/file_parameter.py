@@ -5,12 +5,20 @@ from lib.db.models.file_parameter import DbFileParameter
 from lib.db.models.parameter_type import DbParameterType
 
 
+def delete_parameter_files(db: Database, file_id: int):
+    """
+    Delete all parameter_files associated to a file_id
+    """
+
+    return db.execute(delete(DbFileParameter)
+        .where(DbFileParameter.file_id == file_id))
+
 def delete_file_parameter(db: Database, file_parameter_id: int):
     """
     Delete from the database a parameter value based on a file ID and parameter ID.
     """
 
-    db.execute(delete(DbFileParameter)
+    return db.execute(delete(DbFileParameter)
         .where(DbFileParameter.id == file_parameter_id))
 
 

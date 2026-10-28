@@ -2,8 +2,20 @@ import os
 import shutil
 import sys
 
+from lib.db.models.file import id
+
+from lib.db.queries.file import delete_file, get_file_ids_with_pscid
+
+#deprecated
 from lib.database import Database
+
+#deprecated
 from lib.database_lib.config import Config
+from lib.parameter_file import ParameterFile
+
+#deprecated
+from lib.file import Files
+
 from lib.exitcode import INVALID_ARG
 from lib.lorisgetopt import LorisGetOpt
 
@@ -20,7 +32,7 @@ def main():
 
         "options: \n"
         "\t-p, --profile      : Name of the python database config file in config\n"
-        "\t-i  --pscid        : pscid of candidate to delete mri bids
+        "\t-i  --pscid,        : pscid of candidate to delete mri bids\n"
         "\t-c, --confirm      : After a trial run, perform the deletion\n"
         "\t-d, --deleteondisk : Delete files on disk\n"
         "\t-v, --verbose      : If set, be verbose\n\n"
@@ -34,7 +46,7 @@ def main():
             "value": None, "required": False, "expect_arg": True, "short_opt": "p", "is_path": False
         }, 
         "pscid": { 
-            "value": None, "required": False, "expect_arg": False, "short_opt": "i", "is_path": False
+            "value": None, "required": True, "expect_arg": False, "short_opt": "i", "is_path": False
         },    
         "confirm": {
             "value": None, "required": False, "expect_arg": False, "short_opt": "c", "is_path": False
@@ -72,11 +84,19 @@ def main():
     data_path = config_db_obj.get_config("dataDirBasepath")
 
     # ---------------------------------------------------------------------------------------------
+    # Load database lib objects
+    # ---------------------------------------------------------------------------------------------
+    
+    #deprecated
+    param_file_obj = ParameterFile(db, verbose)
+    files_obj = Files(db, verbose)
+
+    # ---------------------------------------------------------------------------------------------
     # Run the script
     # ---------------------------------------------------------------------------------------------
-    get_file_ids(db, file_id)
+    files_obj.get_file_ids_with_pscid(db, file_id)
 
-    for file_id in file_ids:
+    for file_id in get_file_ids_with_pscid(session, pscid):
         delete_bids_file(db, file_id, confirm, deleteondisk)
         delete_pics(db,file_id)
         delete_file_in_db(db, file_id)
@@ -84,44 +104,21 @@ def main():
     db.disconnect()
 
 def get_file_ids(db, pscid):
-    """
-    Check that this candidate has mri bids in the database
 
-    :param db: database object from the database.py class
-     :type db: Database
-    :param pscid
-     :type pscid: str
-    :return array
-    """
-
-    file_ids = db.pselect(
-        """
-        SELECT 
-        FileID, File FROM files f
-        JOIN session s ON f.SessionID = s.ID
-        JOIN Project p ON s.ProjectID = project_id
-        JOIN candidate c ON c.CandID = s.CandID
-        WHERE c.PSCID = '%s';
-        """
-    )
+    file_ids = files_obj.get_file_by_pscid()
 
     if (count(file_ids) == 0):
         print(f"\nPSCID : {pscid} does not have entries in the files table.\n")
-        sys.exit(INVALID_ARG)
+        #exit code
 
     else:
         return file_ids
 
 def delete_file_in_db(db, file_id):
 
-    parameter_file_ids = db.pselect(
-        """
-        SELECT ParameterFileID FROM parameter_file pf WHERE pf.FileID = %s;
-        """,
-        (file_id,)
-    )
+    parameter_files = param_file_obj.get_parameter_files(file_id)
 
-    if count(parameter_file_ids) == 0:
+    if count(parameter_files) == 0:
         print(f'\nparameters for file_id {file_id} not found. Skipping')
             continue
 
@@ -129,37 +126,19 @@ def delete_file_in_db(db, file_id):
         print(f"\nDropping all DB entries for MRI file: {file_id}\n")
         print("----------------------------\n")
 
-        db.update(
-            """
-            DELETE FROM parameter_files WHERE FileID = %s
-            """,
-            (file_id,) 
-        )
+    delete_param = param_file_obj.delete_parameter_files(file_id)
+    #some kind of exit code if a problem
 
-        #delete the entry from files table
-        db.update(
-            """
-            "DELETE FROM files WHERE file_id = %s"
-            """,
-            (file_id,)
-        )
-        print(f'\ndeleted file_id {file_id}')
+    delete_file_id = files_obj.delete_file(db, file_id):
+    #some kind of exit code if a problem
 
     else:
-        param_id_value = {}
-        param_id_value = db.pselect(
-            """
-            SELECT ParameterFileID, Value FROM parameter_file WHERE File ID = %s
-            """,
-            (file_id,)
-        )
-        for k,v in param_id_value.items:
-            print(f'\nWould delete ParameterFileID {k} and Value {v}')
+        for pf in parameter_files:
+            print(f'\nWould delete ParameterFileID {pf}')
             
-
     Return None
 
-
+#use ORM
 def delete_bids_file(db, file_id)
     
     file_path = db.pselect(
@@ -216,3 +195,5 @@ duplicates = [
     Q1K0000201,Q1K0000202,Q1K0000203,Q1K0000204,Q1K0000207,Q1K0000208,Q1K0000215,
     Q1K0000276,Q1K0000277,Q1K0000285,Q1K0000287,Q1K0000341
     ]
+
+    use session.commit()
