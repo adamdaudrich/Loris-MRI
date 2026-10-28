@@ -2,19 +2,10 @@ import os
 import shutil
 import sys
 
+from lib.db.models.config import config
 from lib.db.models.file import id
-
-from lib.db.queries.file import delete_file, get_file_ids_with_pscid
-
-#deprecated
-from lib.database import Database
-
-#deprecated
-from lib.database_lib.config import Config
-from lib.parameter_file import ParameterFile
-
-#deprecated
-from lib.file import Files
+from lib.db.models.file_parameter import delete_parameter_files
+from lib.db.queries.file import get_file_ids_with_pscid, delete_file, 
 
 from lib.exitcode import INVALID_ARG
 from lib.lorisgetopt import LorisGetOpt
@@ -28,14 +19,13 @@ def main():
         "********************************************************************\n"
         "This script deletes all the MRI bids data associated with an PSCID"
 
-        "usage  : delete_mri_bids.py -f file_id -p <profile> ...\n\n"
+        "usage  : delete_mri_bids.py --pscid <pscid> --deleteondisk --confirm\n\n"
 
         "options: \n"
         "\t-p, --profile      : Name of the python database config file in config\n"
-        "\t-i  --pscid,        : pscid of candidate to delete mri bids\n"
+        "\t-i  --pscid,       : pscid of candidate to delete mri bids\n"
         "\t-c, --confirm      : After a trial run, perform the deletion\n"
         "\t-d, --deleteondisk : Delete files on disk\n"
-        "\t-v, --verbose      : If set, be verbose\n\n"
 
         "required options are: \n"
         "\t--fileid\n"
@@ -53,9 +43,6 @@ def main():
         },
         "deleteondisk": {
             "value": None, "required": False, "expect_arg": False, "short_opt": "d", "is_path": False
-        },
-        "verbose": {
-            "value": False, "required": False, "expect_arg": False, "short_opt": "v", "is_path": False
         },
         "help": {
             "value": False, "required": False, "expect_arg": False, "short_opt": "h", "is_path": False
