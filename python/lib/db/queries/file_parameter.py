@@ -19,7 +19,13 @@ def try_get_pic_paths_with_file_id(db: Database, file_id: int):
     """
 
     return db.execute(select(DbFileParameter.value)
-        .where(DbFileParameter.file_id == file.id))
+        .where(DbFileParameter.file_id == file_id)
+        .where(DbFileParameter.type_id == (
+            select(DbParameterType.id)
+            .where(DbParameterType.name == 'check_pic_filename')
+            .scalar_subquery()
+        ))
+    ).scalars().all()
 
 def delete_file_parameter(db: Database, file_parameter_id: int):
     """

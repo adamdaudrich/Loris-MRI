@@ -1,6 +1,7 @@
 import os
 import shutil
 import sys
+import glob
 
 # use sqlalchemy.orm.Session to communicate with the database
 # Usually, database session variables are named db and the 
@@ -51,7 +52,7 @@ from lib.db.models import file_parameter
 #nested loop).
 
 from lib.db.queries.file import get_file_ids_with_pscid, delete_file, try_get_path_with_file_id
-from lib.db.queries.file_parameter import delete_file_parameters
+from lib.db.queries.file_parameter import delete_file_parameters, try_get_pic_paths_with_file_id
 
 from lib.exitcode import INVALID_ARG
 from lib.lorisgetopt import LorisGetOpt
@@ -61,7 +62,7 @@ def main():
         "\n"
 
         "********************************************************************\n"
-        " DELETE MRI File \n"
+        " DELETE MRI BIDS \n"
         "********************************************************************\n"
         "This script deletes all the MRI bids data associated with an PSCID"
 
@@ -108,23 +109,33 @@ def main():
     deleteondisk = loris_getopt_obj.options_dict['deleteondisk']['value']
 
     db = loris_getopt_obj.env.db
+
+    data_path = '/data/cbigr/data'
     # ---------------------------------------------------------------------------------------------
     # Run the script
     # ---------------------------------------------------------------------------------------------
 
+    MODALITIES = ['anat', 'dwi', 'fmap', 'func']
+
     for file_id in get_file_ids_with_pscid(db, pscid):
-#        delete_pics(db,file_id)
+        
+        # delete_pics(db,file_id, deleteondisk)
+        
         # result = delete_file_parameters(db, file_id)
         # print(f"File {file_id}: {result.rowcount} parameter row(s) deleted") 
-#        delete_bids_file(db, file_id)
-        # resultt = delete_file(db, file_id)
+        
+        delete_bids_file(db, file_id, deleteondisk)
+
         # print(f"File {file_id}: {resultt.rowcount} deleted")
-        #delete the empty mri modality directory
+        for modality in MODALITIES:
+        modality_dir = os.path.join(subject_dir, modality)
+        delete_modality_dirs(data_path, bids_path, pscid, deleteondisk)
+        # delete the empty mri modality directory
 
 
-def delete_bids_file(db, file_id):
+def delete_bids_file(db, file_id, deleteondisk):
 
-    file_paths = try_get_path_with_file_id(db, file_id)    
+    file_path = try_get_path_with_file_id(db, file_id)    
     # for file in file_paths:
     #     print(f"{i}")
 
@@ -132,27 +143,63 @@ def delete_bids_file(db, file_id):
         print(f"\nDeleting {file}\n")
         print("----------------------------\n")
 
-         os.remove(os.path.join(data_path, file))
-             except Exception as e:
-                print(f"Caught exception: {e} \n")
+        os.remove(os.path.join(data_path, file_path))
+        # except Exception as e:
+        #     print(f"Caught exception: {e} \n")
 
     else:
         print(f'\nWould have deleted {file_path} from disk')
-        print("\nRun with --deleteondisk to delete.\n")
 
-def delete_pic(db, file_id)
+def delete_modality_dirs(pscid, deleteondisk):
+    """Delete MRI modality dirs for a participant if they are empty"""
+    
+    modalities = ['anat', 'dwi', 'fmap', 'func']
 
-    pic_paths = try_get_pic_paths_with_file_id(db, file_id):
+    subject_dir = os.path.join(data_path, bids_path, 'sub-' + pscid)
+
+    if not os.path.isdir(subject_dir):
+        print(f'{subject_dir} does not exist. Skipping')
+        return
+
+    for session_dir in glob.glob(os.path.join(subject_dir, 'ses-*')):
+        for modality in modalities:
+            modality_dir = os.path.join(session_dir, modality)
+            delete_folder_if_empty(modality_dir, deleteondisk)
+
+def delete_folder_if_empty(modality_dir, deleteondisk):
+    """Delete the folder if it exists and is empty"""
+
+    if not os.path.isdir(folder_path):
+        return
+
+    if os.listdir(folder_path):
+        print(f'\nNot deleting {folder_path}, folder is not empty')
+        return
+
+    if deleteondisk:
+        try:
+            os.rmdir(folder_path)
+            print(f'\nDeleted empty folder {folder_path}')
+        except OSError as e:
+            print(f'Caught exception: {e}\n')
+    else:
+        print(f'\nWould delete empty folder {folder_path}')
+
+def delete_pics(db, file_id, deleteondisk):
+
+    pic_paths = try_get_pic_paths_with_file_id(db, file_id)
 
     for path in pic_paths:
-        
         if deleteondisk:
-        os.remove(os.path.join(data_path, path))
+            try:
+                os.remove(os.path.join(data_path, path))
             except Exception as e:
                 print(f"Caught exception: {e} \n")
 
         else:
             print(f'\nWould delete {path}')
+
+
 
 if __name__ == "__main__":
     main()
