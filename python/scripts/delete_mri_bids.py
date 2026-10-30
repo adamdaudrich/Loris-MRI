@@ -2,55 +2,15 @@ import os
 import shutil
 import sys
 import glob
-
-# use sqlalchemy.orm.Session to communicate with the database
-# Usually, database session variables are named db and the 
-# SQLAlchemy Session is renamed to Database to not conflict with the LORIS concept of a session 2.
 from sqlalchemy.orm import Session as Database
 
-#The SQLAlchemy models are defined in the lib.db.models module. 
-#Each file contains a single SQLAlchemy model that is linked to 
-#a given LORIS SQL table. A model file should be named model_name.py 
-#and a model class should be named DbModelName. 
-#A model describes the structure of its table and its relations 
-#with other models. Do not import model classes directly in other 
-#models as this can create cyclic dependencies that Python 
-#cannot handle.
-
-#An SQLAlchemy model and its attributes can be renamed compared 
-#to the LORIS SQL schema to adhere to the Python naming conventions,
-# avoid repetitions, and provide a more consistent database abstraction.
-
-#There is an integration test to ensure the SQLAlchemy models 
-#remain synchronized with the LORIS SQL schema.
+from lib.config import get_data_dir_path_config
 
 from lib.db.models import config
 from lib.db.models import file
 from lib.db.models import file_parameter
 
-
-# The SQLAlchemy queries are defined in the lib.db.queries module. 
-#This module is divided in submodules that group queries by theme 
-#(for instance lib.db.queries.candidate for candidate-related queries).
-
-# All the LORIS-MRI SQLAlchemy queries should go in lib.db.queries, doing so
-# allows to make queries more discoverable, reusable, and to isolate them 
-# from the rest of the code logic.
-
-# Each query should be encapsulated in a function that takes the 
-#database session and the query parameters as arguments, and 
-#returns the query results, None, or pass through the SQLAlchemy 
-#exception in case of error. The query functions should not contain 
-#any error handling, logging, transaction management, or complex logic. 
-# This work should be delegated to the caller.
-
-# When possible, queries should also be written in a generalized 
-#way that make them easily reusable by other parts of the code. 
-#For instance, it is often preferable for a query to return a whole model object instead of only some of its fields as different callers might be interested in different fields. Micro-optimization should be avoided unless a query is called in a particularly performance-sensitive section of the code.
-# Finally, model relations should be preferred to queries where 
-#they do not blow up the complexity of the code (such as in a 
-#nested loop).
-
+from lib.db.queries.config import get_config_with_setting_name
 from lib.db.queries.file import get_file_ids_with_pscid, delete_file, try_get_path_with_file_id
 from lib.db.queries.file_parameter import delete_file_parameters, try_get_pic_paths_with_file_id
 
@@ -84,7 +44,12 @@ def main():
         },
         "pscid": { 
             "value": None, "required": True, "expect_arg": True, "short_opt": "i", "is_path": False
-        },    
+        },
+        # cbigr override open
+        "project_bids_dir": {
+            "value": None, "required": True, "expected_arg": True. "short_opt": "f", "is_path": True
+        }
+        #cbigr override close
         "confirm": {
             "value": None, "required": False, "expect_arg": False, "short_opt": "c", "is_path": False
         },
@@ -101,72 +66,105 @@ def main():
 
     # ---------------------------------------------------------------------------------------------
     # Get the options provided by the user
-    # ---------------------------------------------------------------------------------------------
-    #loris_getopt_obj = LorisGetOpt(usage, options_dict, os.path.basename(__file__[:-3]))  
+    # --------------------------------------------------------------------------------------------- 
+    
     loris_getopt_obj = LorisGetOpt(usage, options_dict, 'delete_mri_bids')
     pscid = loris_getopt_obj.options_dict['pscid']['value']
+    project_folder = loris_get_opt.options_dict['project_bids_dir']['value']
     confirm = loris_getopt_obj.options_dict['confirm']['value']
     deleteondisk = loris_getopt_obj.options_dict['deleteondisk']['value']
 
+    # ---------------------------------------------------------------------------------------------
+    # Get the database
+    #----------------------------------------------------------------------------------------------
+    
     db = loris_getopt_obj.env.db
+    
+    #----------------------------------------------------------------------------------------------
+    # Get paths
+    #----------------------------------------------------------------------------------------------
 
-    data_path = '/data/cbigr/data'
+    data_path = get_config_with_setting_name(db, 'dataDirBasepath').value
+    bids_path = data_path + 'bids_imports' + project_folder
+
     # ---------------------------------------------------------------------------------------------
     # Run the script
     # ---------------------------------------------------------------------------------------------
 
-    MODALITIES = ['anat', 'dwi', 'fmap', 'func']
-
     for file_id in get_file_ids_with_pscid(db, pscid):
         
         # delete_pics(db,file_id, deleteondisk)
-        
         # result = delete_file_parameters(db, file_id)
-        # print(f"File {file_id}: {result.rowcount} parameter row(s) deleted") 
+        if result:
+            print(f"File {file_id}: {result.rowcount} parameter row(s) deleted") 
         
-        delete_bids_file(db, file_id, deleteondisk)
-
+        else:
+            print(f'no file parameters deleted for file id : {file_id}')
+        #delete_bids_file(db, file_id, deleteondisk)
         # print(f"File {file_id}: {resultt.rowcount} deleted")
-        for modality in MODALITIES:
-        modality_dir = os.path.join(subject_dir, modality)
-        delete_modality_dirs(data_path, bids_path, pscid, deleteondisk)
-        # delete the empty mri modality directory
+        
+    delete_dirs(bids_path, pscid, deleteondisk)
+    delete_participant_tsv_line(bids_path, pscid, deleteondisk)
 
+#-------------------------------------------------------------------------------------------------
+# Helpers
+#-------------------------------------------------------------------------------------------------
+
+def delete_pics(db, file_id, deleteondisk):
+    """Delete the pics associated to the file_id queried in parameter_file table"""
+
+    pic_paths = try_get_pic_paths_with_file_id(db, file_id)
+
+    for path in pic_paths:
+        if deleteondisk:
+            try:
+                os.remove(os.path.join(data_path, path))
+                print(f'\nDeleted {path}')
+
+             except OSError as e:
+                print(f"Couldn't delete {path}: {e}")
+
+        else:
+            print(f'\nWould delete {path}')
 
 def delete_bids_file(db, file_id, deleteondisk):
+    """Delete the file that was queried by file id on disk"""
 
     file_path = try_get_path_with_file_id(db, file_id)    
-    # for file in file_paths:
-    #     print(f"{i}")
 
     if deleteondisk:
-        print(f"\nDeleting {file}\n")
-        print("----------------------------\n")
+        try: 
+            os.remove(os.path.join(data_path, file_path))
+            except OSError as e:
+                print(f"Couldn't delete {file_path}: {e}")
 
-        os.remove(os.path.join(data_path, file_path))
-        # except Exception as e:
-        #     print(f"Caught exception: {e} \n")
+        else:
+            print(f'\nWould have deleted {file_path} from disk')
 
-    else:
-        print(f'\nWould have deleted {file_path} from disk')
-
-def delete_modality_dirs(pscid, deleteondisk):
+def delete_dirs(bids_path, pscid, deleteondisk):
     """Delete MRI modality dirs for a participant if they are empty"""
     
-    modalities = ['anat', 'dwi', 'fmap', 'func']
-
-    subject_dir = os.path.join(data_path, bids_path, 'sub-' + pscid)
-
+    subject_dir = os.path.join(bids_path, 'sub-' + pscid)
+    
     if not os.path.isdir(subject_dir):
         print(f'{subject_dir} does not exist. Skipping')
         return
+    
+    modalities = ['anat', 'dwi', 'fmap', 'func']
 
     for session_dir in glob.glob(os.path.join(subject_dir, 'ses-*')):
         for modality in modalities:
             modality_dir = os.path.join(session_dir, modality)
-            delete_folder_if_empty(modality_dir, deleteondisk)
+            if os.path.isdir(modality_dir):
+                delete_folder_if_empty(modality_dir, deleteondisk)
+        
+        delete_dir_if_empty(session_dir, deleteondisk)
+    
+    delete_dir_if_empty(subject_dir, deleteondisk)
 
-def delete_folder_if_empty(modality_dir, deleteondisk):
+    return None
+
+def delete_dir_if_empty(dir, deleteondisk):
     """Delete the folder if it exists and is empty"""
 
     if not os.path.isdir(folder_path):
@@ -180,37 +178,40 @@ def delete_folder_if_empty(modality_dir, deleteondisk):
         try:
             os.rmdir(folder_path)
             print(f'\nDeleted empty folder {folder_path}')
+
         except OSError as e:
             print(f'Caught exception: {e}\n')
     else:
         print(f'\nWould delete empty folder {folder_path}')
 
-def delete_pics(db, file_id, deleteondisk):
+def delete_participant_tsv_line(bids_path, pscid, deleteondisk):
+    """Remove a participant's row from participants.tsv"""
 
-    pic_paths = try_get_pic_paths_with_file_id(db, file_id)
+    tsv_path = os.path.join(bids_path, 'participants.tsv')
+    participant_id = f'sub-{pscid}'
 
-    for path in pic_paths:
-        if deleteondisk:
-            try:
-                os.remove(os.path.join(data_path, path))
-            except Exception as e:
-                print(f"Caught exception: {e} \n")
+    if not os.path.isfile(tsv_path):
+        print(f'{tsv_path} does not exist. Skipping')
+        return
 
-        else:
-            print(f'\nWould delete {path}')
+    with open(tsv_path, 'r', newline='') as f:
+        lines = f.readlines()
 
+    # Keep the header and every row whose first column isn't this participant
+    kept = [line for line in lines if line.split('\t')[0].strip() != participant_id]
 
+        if len(kept) == len(lines):
+        print(f'{participant_id} not found in {tsv_path}')
+        return
+
+    if deleteondisk:
+        tmp_path = tsv_path + '.tmp'
+        with open(tmp_path, 'w', newline='') as f:
+            f.writelines(kept)
+        os.replace(tmp_path, tsv_path)
+        print(f'Removed {participant_id} from {tsv_path}')
+    else:
+        print(f'Would remove {participant_id} from {tsv_path}')
 
 if __name__ == "__main__":
     main()
-
-
-# duplicates = [
-#     Q1K0000017,Q1K0000110,Q1K0000114,Q1K0000115,Q1K0000116,Q1K0000117,Q1K0000118,
-#     Q1K0000119,Q1K0000120,Q1K0000121,Q1K0000122,Q1K0000123,Q1K0000126,Q1K0000127,
-#     Q1K0000128,Q1K0000129,Q1K0000130,Q1K0000136,Q1K0000144,Q1K0000146,Q1K0000147,
-#     Q1K0000201,Q1K0000202,Q1K0000203,Q1K0000204,Q1K0000207,Q1K0000208,Q1K0000215,
-#     Q1K0000276,Q1K0000277,Q1K0000285,Q1K0000287,Q1K0000341
-#     ]
-
-#     use session.commit()
