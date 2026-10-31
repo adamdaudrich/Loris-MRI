@@ -84,7 +84,7 @@ def get_file_ids_with_pscid(db: Database, pscid: str) -> list[int]:
         .where(DbCandidate.psc_id == pscid)
     ).scalars().all())
 
-def delete_file(db: Database, file_id: int):
+def delete_file_id(db: Database, file_id: int):
     """
     Delete from the database a file entry based on a file ID.
     """
