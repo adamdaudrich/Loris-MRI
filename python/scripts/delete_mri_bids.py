@@ -47,7 +47,7 @@ def main():
         },
         # cbigr override open
         "project_bids_dir": {
-            "value": None, "required": False, "expect_arg": False, "short_opt": "f", "is_path": True
+            "value": None, "required": False, "expect_arg": True, "short_opt": "f", "is_path": False
         },
         #cbigr override close
         "confirm": {
@@ -85,57 +85,65 @@ def main():
     #----------------------------------------------------------------------------------------------
 
     data_path = try_get_config_with_setting_name(db, 'dataDirBasepath').value
-    #print(f' DATA DIR BASE PATH ISSSSSSSSSSSSSSSSSSSSSSSSS {data_path}')
-    # bids_path = data_path + 'bids_imports/' + project_folder
-    # print(f' BIDS PATH ISSSSSSSSSSSSSSSSSSSSSSSSSSSSSS {bids_path}')
-    pics_path = data_path + 'pic'
-    #print(f' PIC PATH ISSSSSSS {pics_path}')
+    pics_path = os.path.join(data_path, 'pic')
+    bids_path = os.path.join(data_path + 'bids_imports/' + project_folder) if project_folder else None
+    
+    if not os.path.isdir(bids_path):
+        print(f'{bids_path} does not exist. Check --project_bids_dir')
+        sys.exit(INVALID_ARG)
 
     # ---------------------------------------------------------------------------------------------
     # Run the script
     # ---------------------------------------------------------------------------------------------
 
-    deleted = 0
+    deleted_files = 0
+    deleted_params = 0
     try:
-        for file_id in get_file_ids_with_pscid(db, pscid):
-            
-            #delete_pics(db,file_id, pics_path, deleteondisk)
-#==================================================================
+        file_ids = list(get_file_ids_with_pscid(db, pscid))
+        if not file_ids:
+            print(f'No files found for PSCID {pscid}')
+            return
+
+        for file_id in file_ids:
+            print(f'\n--- File ID {file_id} ---')
+A
+            try:
+                delete_pics(db, file_id, pics_path, deleteondisk)
+                delete_bids_file(db, file_id, data_path, deleteondisk)
+            except Exception as e:
+                print(f'Disk cleanup failed for file {file_id}: {e}. Continuing.')
+
             result = delete_file_parameters(db, file_id)
-            if result:
-                print(f"File {file_id}: {result.rowcount} parameter row(s) deleted") 
-            else:
-                print(f'no file parameters found for file id : {file_id}')
+            n = result.rowcount if result is not None else 0
+            print(f'{n} parameter row(s) for file {file_id}')
+            deleted_params += n
 
-        if confirm:
+            result = delete_file_id(db, file_id)
+            n = result.rowcount if result is not None else 0
+            print(f'{n} file row(s) for file {file_id}')
+            deleted_files += n
+
+
+        for pic_dir in pic_dirs:
+            delete_dir_if_empty(pic_dir, deleteondisk)
+        print(f'\n--- BIDS folders for sub-{pscid} ---')
+        
+        try:
+            delete_dirs(bids_path, pscid, deleteondisk)
+            delete_participant_tsv_line(bids_path, pscid, deleteondisk)
+        except Exception as e:
+            print(f'BIDS folder cleanup failed: {e}. Continuing.')
+
+        if deleted_files == 0 and deleted_params == 0:
+            db.rollback()
+            print('\nNothing to delete in the database.')
+        elif confirm:
             db.commit()
-            print("Deletion committed.")
-
+            print(f'\nCommitted: {deleted_files} file row(s), {deleted_params} parameter row(s) deleted.')
         else:
             db.rollback()
-            print("trial run:. Use --confirm to delete")
-#==================================================================
-        #     result = delete_file(db, file_id)  
-
-        #     if result is not None and result.rowcount > 0:
-        #         print(f"File {file_id}: {result.rowcount} deleted")
-        #         deleted += result.rowcount
-        #     else:
-        #         print(f"No entry deleted from file table for file id {file_id}")
-
-        # if deleted == 0:
-        #     db.rollback()
-        #     print("Nothing to delete.")
-        # elif confirm:
-        #     db.commit()
-        #     print(f"{deleted} row(s) deleted and committed.")
-        # else:
-        #     db.rollback()
-        #     print(f"Trial run: {deleted} row(s) would be deleted. Use --confirm to delete.")
-                    
-            delete_bids_file(db, file_id, data_path, deleteondisk)
-        # delete_dirs(bids_path, pscid, deleteondisk)
-        # delete_participant_tsv_line(bids_path, pscid, deleteondisk)
+            print(f'\nTrial run: {deleted_files} file row(s), {deleted_params} parameter row(s) '
+                    f'would be deleted. Use --confirm to delete.')
     except Exception:
         db.rollback()
         raise
@@ -158,31 +166,36 @@ def delete_pics(db, file_id, pics_path, deleteondisk):
                 os.remove(os.path.join(pics_path, path))
                 print(f'\nDeleted {path}')
             except OSError as e:
-                print(f"Couldn't delete {path}: {e}")
+                print(f"Couldn't delete {path}: \n {e}")
 
         else:
             print(f'\nWould delete {path}')
 
-    for pic_dir in pic_dirs:
-        delete_dir_if_empty(pic_dir, deleteondisk)
 
 def delete_bids_file(db, file_id, data_path, deleteondisk):
-    """Delete the file that was queried by file id on disk"""
+    """Delete the image for file_id on disk, plus its sidecars. Never raises."""
 
+    print('--- bids file ---')
     file_path = try_get_path_with_file_id(db, file_id)
-    full_path = os.path.join(data_path, file_path)
-    print(f'FULL PATH IS {full_path}')    
+    if not file_path:
+        print(f'No path recorded for file id {file_id}, skipping disk deletion')
+        return
 
-    if deleteondisk:
-        try: 
-            os.remove(os.path.join(data_path, file_path))
+    full_path = os.path.join(data_path, file_path)
+
+    if not os.path.isfile(full_path):
+        print(f'{file_path} not found on disk, continuing')
+    elif deleteondisk:
+        try:
+            os.remove(full_path)
+            print(f'Deleted {full_path}')
         except OSError as e:
             print(f"Couldn't delete {file_path}: {e}")
-        
-        delete_sidecars(full_path, deleteondisk)
-
     else:
-        print(f'\nWould have deleted {file_path} from disk')
+        print(f'Would delete {full_path}')
+
+    # Sidecars may still exist even when the image itself is gone
+    delete_sidecars(full_path, deleteondisk)
 
 
 def delete_sidecars(image_path, deleteondisk):
@@ -211,6 +224,15 @@ def delete_sidecars(image_path, deleteondisk):
         else:
             print(f'\nWould delete {sidecar}')
 
+def get_bids_root(file_path, pscid):
+    """Return the part of file_path before the sub-<pscid> folder, or None"""
+
+    parts = os.path.normpath(file_path).split(os.sep)
+    subject = f'sub-{pscid}'
+    if subject not in parts:
+        return None
+    return os.sep.join(parts[:parts.index(subject)])
+
 def delete_dirs(bids_path, pscid, deleteondisk):
     """Delete MRI modality dirs for a participant if they are empty"""
     
@@ -226,7 +248,7 @@ def delete_dirs(bids_path, pscid, deleteondisk):
         for modality in modalities:
             modality_dir = os.path.join(session_dir, modality)
             if os.path.isdir(modality_dir):
-                delete_folder_if_empty(modality_dir, deleteondisk)
+                delete_dir_if_empty(modality_dir, deleteondisk)
         
         delete_dir_if_empty(session_dir, deleteondisk)
     
