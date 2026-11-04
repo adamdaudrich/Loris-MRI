@@ -51,16 +51,6 @@ def try_get_file_with_path(db: Database, path: Path) -> DbFile | None:
         .where(DbFile.path == path)
     ).scalar_one_or_none()
 
-def try_get_path_with_file_id(db: Database, file_id: int) -> DbFile | None:
-    """
-    Get the bids file path from the database using its file_id
-    """
-
-    return db.execute(
-        select(DbFile.path).where(DbFile.id == file_id)
-    ).scalar_one_or_none()
-
-
 def try_get_file_with_hash(db: Database, file_hash: str) -> DbFile | None:
     """
     Get an imaging file from the database using its BLAKE2b or MD5 hash, or return `None` if no
@@ -73,18 +63,18 @@ def try_get_file_with_hash(db: Database, file_hash: str) -> DbFile | None:
         .where(DbFileParameter.value == file_hash)
     ).scalar_one_or_none()
 
-def get_file_ids_with_pscid(db: Database, pscid: str) -> list[int]:
+def get_files_with_candidate_id(db: Database, candidate_id: int) -> Sequence[DbFile]:
     """
-    Get the IDs of all the imaging files associated with a given PSCID.
+    Get the imaging files from the database associated with a given candidate ID.
     """
 
-    return list(db.execute(select(DbFile.id)
-        .join(DbSession, DbFile.session_id == DbSession.id)
-        .join(DbCandidate, DbSession.cand_id == DbCandidate.cand_id)
-        .where(DbCandidate.psc_id == pscid)
-    ).scalars().all())
+    return db.execute(select(DbFile)
+        .join(DbFile.session)
+        .join(DbSession.candidate)
+        .where(DbCandidate.candidate_id == candidate_id)
+    ).scalars().all()
 
-def delete_file_id(db: Database, file_id: int):
+def delete_file_entry(db: Database, file_id: int):
     """
     Delete from the database a file entry based on a file ID.
     """
