@@ -1,22 +1,21 @@
 import argparse
 import sys
 
-from collections import Counter
 from pathlib import Path
+from collections import Counter
 
 from lib.config import get_data_dir_path_config
-from lib.env import Env
+from lib.config_file import load_config
 from lib.make_env import make_env
 from lib.exitcode import INVALID_ARG
 
+from lib.db.queries.candidate import try_get_candidate_with_psc_id
 from lib.db.queries.config import try_get_config_with_setting_name
-from lib.d
 from lib.db.queries.file import try_get_file_with_id, get_files_with_candidate_id, delete_file_entry
-from lib.db.queries.file_parameter import delete_file_parameters, try_get_pic_paths_with_file_id
+from lib.db.queries.file_parameter import delete_file_parameters, try_get_parameter_value_with_file_id_parameter_name
 
 from loris_bids_utils.files.participants import BidsParticipantsTsvFile
 
-# from lib.lorisgetopt import LorisGetOpt
 
 # Set from --verbose in main(). When False, only summaries and errors are printed.
 VERBOSE = False
@@ -59,7 +58,7 @@ def main():
 
     parser.add_argument(
         '-c', '--confirm',
-        action='store_true'
+        action='store_true',
         help="Commits database entry deletion"
     )
 
@@ -82,16 +81,17 @@ def main():
     pscid = args.pscid
     project_folder = args.project_bids_dir
     confirm = args.confirm
-    deleteondisk = args.deletondisk
+    deleteondisk = args.deleteondisk
     VERBOSE = args.verbose
     
     #set environment
     env = make_env('delete_mri_bids', {}, config_file, args.verbose)
+    db = env.db
     
     #set data dir base path
     data_path = get_data_dir_path_config(env)
 
-    #data_path = try_get_config_with_setting_name(env.db, 'dataDirBasepath').value
+    #data_path = try_get_config_with_setting_name(db, 'dataDirBasepath').value
     pics_path = data_path /'pic'
     bids_path = data_path / 'bids_imports' / project_folder
 
@@ -107,38 +107,51 @@ def main():
     deleted_params = 0
     try:
         #provide error message here if None is returned
-        candidate_id = try_get_candidate_with_pscid(env.db, pscid)
+        candidate = try_get_candidate_with_psc_id(db, pscid)
+        
+        if candidate is None:
+            print(f'No candidate found with PSCID {pscid}')
+            sys.exit(INVALID_ARG)
 
-        file_ids = get_files_with_candidate_id(env.db, candidate_id)
-        print(f'Found {len(file_ids)} file(s) in the database for PSCID {pscid}')
+        cand_id = candidate.cand_id
+
+        files = get_files_with_candidate_id(db, cand_id)
+
+
+        file_ids = [file.id for file in files]
+        vprint(f'Found {len(file_ids)} file(s) in the database for PSCID {pscid}')
 
         # Per-file cleanup: disk first (needs the DB rows to look up paths), then DB rows
-        for file_id in file_ids:
-            vprint(f'\n--- File ID {file_id} ---')
+        for id in file_ids:
+            vprint(f'\n--- File ID {id} ---')
 
             try:
-                delete_pics(db, file_id, pics_path, deleteondisk)
-                delete_bids_file(env.db, file_id, data_path, deleteondisk)
+                delete_pic(db, id, pics_path, deleteondisk)
+                # delete_bids_file(db, file_id, data_path, deleteondisk)
             except Exception as e:
-                print(f'Disk cleanup failed for file {file_id}: {e}. Continuing.')
+                print(f'Disk cleanup failed for file {id}: {e}. Continuing.')
 
-            result = delete_file_parameters(env.db, file_id)
-            n = result.rowcount if result is not None else 0
-            vprint(f'{n} parameter row(s) for file {file_id}')
-            deleted_params += n
+    #         result = delete_file_parameters(db, file_id)
+    #         n = result.rowcount if result is not None else 0
+    #         vprint(f'{n} parameter row(s) for file {file_id}')
+    #         deleted_params += n
 
-            result = delete_file_entry(env.db, file_id)
-            n = result.rowcount if result is not None else 0
-            vprint(f'{n} file row(s) for file {file_id}')
-            deleted_files += n
+    #         result = delete_file_entry(db, file_id)
+    #         n = result.rowcount if result is not None else 0
+    #         vprint(f'{n} file row(s) for file {file_id}')
+    #         deleted_files += n
 
-        # Participant-level BIDS cleanup, runs even if no files were found in the database
-        vprint(f'\n--- BIDS folders for sub-{pscid} in {bids_path} ---')
-        try:
-            delete_dirs(bids_path, pscid, deleteondisk)
-            delete_participant_tsv_line(bids_path, pscid, deleteondisk)
-        except Exception as e:
-            print(f'BIDS folder cleanup failed: {e}. Continuing.')
+    #     # Participant-level BIDS cleanup, runs even if no files were found in the database
+    #     vprint(f'\n--- BIDS folders for sub-{pscid} in {bids_path} ---')
+    #     try:
+    #         delete_dirs(bids_path, pscid, deleteondisk)
+    #     except Exception as e:
+    #         print(f'BIDS folder cleanup failed: {e}. Continuing')
+
+    #     try:
+    #         delete_participant_tsv_line(bids_path, pscid, deleteondisk)
+    #     except Exception as e:
+    #         print(f'BIDS folder cleanup failed: {e}. Continuing.')
 
         # Disk summary
         verb = 'deleted' if deleteondisk else 'would be deleted'
@@ -167,33 +180,38 @@ def main():
 # Helpers
 # -------------------------------------------------------------------------------------------------
 
-def delete_pics(db, file_id, pics_path, deleteondisk):
+def delete_pic(db, file_id, pics_path: Path, deleteondisk):
     """Delete the pics associated to the file_id queried in parameter_file table"""
 
     pic_dirs = set()
 
-    for path in try_get_parameter_value_with_file_id_parameter_name(
-        db, file_id, 'check_pic_filename'):
-        if not path:
-            continue
+    parameter = try_get_parameter_value_with_file_id_parameter_name(
+        db, file_id, 'check_pic_filename')
+        
+    # print(f'PARAMMMMMMMMMMM {parameter.value}')
 
-        full_path = pics_path / path
-        pic_dirs.add(os.path.dirname(full_path))
+    if parameter is None or not parameter.value:
+        vprint(f'No pic recorded for file {file_id}')
+        return
 
-        if not full_path.is_file:
-            vprint(f'{full_path} not found on disk, continuing')
-            continue
+    full_path = pics_path / parameter.value
 
-        if deleteondisk:
-            try:
-                os.remove(full_path)
-                vprint(f'Deleted {full_path}')
-            except OSError as e:
-                print(f"Couldn't delete {full_path}: {e}")
-                continue
-        else:
-            vprint(f'Would delete {full_path}')
-        disk_counts['pics'] += 1
+    if not full_path.is_file():
+        vprint(f'{full_path} not found on disk, continuing')
+        return
+
+    pic_dirs.add(full_path.parent)
+
+    if deleteondisk:
+        try:
+            full_path.unlink()
+            vprint(f'Deleted {full_path}')
+        except OSError as e:
+            print(f"Couldn't delete {full_path}: {e}")
+            return
+    else:
+        vprint(f'Would delete {full_path}')
+    disk_counts['pics'] += 1
 
     for pic_dir in pic_dirs:
         delete_dir_if_empty(pic_dir, deleteondisk)
@@ -267,7 +285,7 @@ def delete_sidecars(image_path: Path, deleteondisk):
 def delete_dirs(bids_path: Path, pscid, deleteondisk):
     """Delete MRI modality, session and subject dirs for a participant if they are empty"""
 
-    subject_dir = bids_path / f'sub-{pscid}'
+    subject_dir = bids_path / f"sub-{pscid.removeprefix('sub')}"
 
     if not subject_dir.is_dir():
         print(f'{subject_dir} does not exist. Skipping folder cleanup')
@@ -277,9 +295,7 @@ def delete_dirs(bids_path: Path, pscid, deleteondisk):
 
     for session_dir in subject_dir.glob('ses-*'):
         for modality in modalities:
-            modality_dir = session_dir / modality
-            if modality_dir.is_dir():
-                delete_dir_if_empty(modality_dir, deleteondisk)
+            delete_dir_if_empty(session_dir, modality, deleteondisk)
 
         delete_dir_if_empty(session_dir, deleteondisk)
 
@@ -298,7 +314,7 @@ def delete_dir_if_empty(folder_path: Path, deleteondisk):
 
     if deleteondisk:
         try:
-            folder_path.rmdir
+            folder_path.rmdir()
             vprint(f'Deleted empty folder {folder_path}')
         except OSError as e:
             print(f"Couldn't delete folder {folder_path}: {e}")

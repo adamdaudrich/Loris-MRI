@@ -8,7 +8,7 @@ from lib.db.models.candidate import DbCandidate
 from lib.db.models.session import DbSession
 from lib.db.models.file_parameter import DbFileParameter
 from lib.db.models.parameter_type import DbParameterType
-
+from collections.abc import Sequence
 
 def try_get_file_with_unique_combination(
     db: Database,
@@ -71,7 +71,7 @@ def get_files_with_candidate_id(db: Database, candidate_id: int) -> Sequence[DbF
     return db.execute(select(DbFile)
         .join(DbFile.session)
         .join(DbSession.candidate)
-        .where(DbCandidate.candidate_id == candidate_id)
+        .where(DbCandidate.cand_id == candidate_id)
     ).scalars().all()
 
 def delete_file_entry(db: Database, file_id: int):
