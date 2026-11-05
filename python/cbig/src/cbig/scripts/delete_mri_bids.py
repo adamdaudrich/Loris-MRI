@@ -8,9 +8,15 @@ from sqlalchemy.orm import Session as Database
 from lib.config import get_data_dir_path_config
 from lib.config_file import load_config
 from lib.db.queries.candidate import try_get_candidate_with_psc_id
-from lib.db.queries.file import delete_file_entry, get_files_with_candidate_id, try_get_file_with_id
+
+from lib.logging import log_error_exit
+
+#cbig specific queries
+from cbig.database.queries.file import delete_file_entry, get_files_with_candidate_id
+from cbig.database.queries.file_parameter import delete_file_parameters
+
+from lib.db.queries.file import try_get_file_with_id
 from lib.db.queries.file_parameter import (
-    delete_file_parameters,
     try_get_parameter_value_with_file_id_parameter_name,
 )
 from lib.exitcode import INVALID_ARG
@@ -76,15 +82,19 @@ def main():
     deleteondisk = args.deleteondisk
     verbose = args.verbose
 
-    # Using only one of the two flags would leave the disk and the database out of sync
-    if confirm != deleteondisk:
-        print('--confirm and --deleteondisk must be used together (or neither, for a trial run)')
-        sys.exit(INVALID_ARG)
-
     # Environment and database
     config_file = load_config(args.profile)
     env = make_env('delete_mri_bids', {}, config_file, args.verbose)
     db = env.db
+    
+    # Using only one of the two flags would leave the disk and the database out of sync
+    if confirm != deleteondisk:
+        log_error_exit(
+            env,
+            "--confirm and --deleteondisk must be used together (or neither, for a trial run)",
+            INVALID_ARG,
+        )
+
 
     # Paths
     data_path = Path(get_data_dir_path_config(env))

@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, delete, select
+from sqlalchemy.orm import Session as Database
 
 from lib.db.models.candidate import DbCandidate
 from lib.db.models.file import DbFile
