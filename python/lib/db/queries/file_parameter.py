@@ -1,31 +1,9 @@
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, CursorResult
 from sqlalchemy.orm import Session as Database
 
 from lib.db.models.file_parameter import DbFileParameter
 from lib.db.models.parameter_type import DbParameterType
 
-
-def delete_file_parameters(db: Database, file_id: int):
-    """
-    Delete all parameter_files associated to a file_id
-    """
-
-    return db.execute(delete(DbFileParameter)
-        .where(DbFileParameter.file_id == file_id))
-
-def try_get_pic_paths_with_file_id(db: Database, file_id: int):
-    """
-    Get mri bids png paths with file_id
-    """
-
-    return db.execute(select(DbFileParameter.value)
-        .where(DbFileParameter.file_id == file_id)
-        .where(DbFileParameter.type_id == (
-            select(DbParameterType.id)
-            .where(DbParameterType.name == 'check_pic_filename')
-            .scalar_subquery()
-        ))
-    ).scalars().all()
 
 def delete_file_parameter(db: Database, file_parameter_id: int):
     """
@@ -34,7 +12,6 @@ def delete_file_parameter(db: Database, file_parameter_id: int):
 
     return db.execute(delete(DbFileParameter)
         .where(DbFileParameter.id == file_parameter_id))
-
 
 def try_get_parameter_value_with_file_id_parameter_name(
     db: Database,

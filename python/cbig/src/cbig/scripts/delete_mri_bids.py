@@ -1,39 +1,36 @@
+from typing import Any
 import argparse
 import sys
-
 from collections import Counter
 from pathlib import Path
+from sqlalchemy.orm import Session as Database
 
 from lib.config import get_data_dir_path_config
 from lib.config_file import load_config
-from lib.make_env import make_env
-from lib.exitcode import INVALID_ARG
-
 from lib.db.queries.candidate import try_get_candidate_with_psc_id
-from lib.db.queries.file import try_get_file_with_id, get_files_with_candidate_id, delete_file_entry
+from lib.db.queries.file import delete_file_entry, get_files_with_candidate_id, try_get_file_with_id
 from lib.db.queries.file_parameter import (
     delete_file_parameters,
     try_get_parameter_value_with_file_id_parameter_name,
 )
-
+from lib.exitcode import INVALID_ARG
+from lib.make_env import make_env
 from loris_bids_utils.files.participants import BidsParticipantsTsvFile
 
-
 # Set from --verbose in main(). When False, only summaries and errors are printed.
-VERBOSE = False
+verbose = False
 
 # Counts of disk actions, reported in the summary at the end of the run
-disk_counts = Counter()
+disk_counts: Counter[str] = Counter()
 
 
-def vprint(*args, **kwargs):
+def vprint(*args: Any, **kwargs: Any):
     """Print only when --verbose is set"""
-    if VERBOSE:
+    if verbose:
         print(*args, **kwargs)
 
-
 def main():
-    global VERBOSE
+    global verbose
 
     parser = argparse.ArgumentParser(
         description="Delete database entries, niftis, sidecars, and pics for a given candidate. "
@@ -77,7 +74,7 @@ def main():
     project_folder = args.project_bids_dir
     confirm = args.confirm
     deleteondisk = args.deleteondisk
-    VERBOSE = args.verbose
+    verbose = args.verbose
 
     # Using only one of the two flags would leave the disk and the database out of sync
     if confirm != deleteondisk:
@@ -138,7 +135,7 @@ def main():
 
             # 2. Parameter rows
             result = delete_file_parameters(db, file_id)
-            n = result.rowcount if result is not None else 0
+            n = result.rowcount
             vprint(f'{n} parameter row(s) for file {file_id}')
             deleted_params += n
 
@@ -155,7 +152,7 @@ def main():
 
             # 4. File row
             result = delete_file_entry(db, file_id)
-            n = result.rowcount if result is not None else 0
+            n = result.rowcount
             vprint(f'{n} file row(s) for file {file_id}')
             deleted_files += n
 
@@ -202,7 +199,7 @@ def main():
 # and False only when an actual deletion failed.
 # -------------------------------------------------------------------------------------------------
 
-def delete_pic(db, file_id, pics_path: Path, deleteondisk: bool) -> bool:
+def delete_pic(db: Database, file_id: int, pics_path: Path, deleteondisk: bool) -> bool:
     """Delete the check pic of a file, found in the parameter_file table"""
 
     parameter = try_get_parameter_value_with_file_id_parameter_name(
@@ -231,7 +228,7 @@ def delete_pic(db, file_id, pics_path: Path, deleteondisk: bool) -> bool:
     return True
 
 
-def delete_bids_file(db, file_id, data_path: Path, deleteondisk: bool) -> bool:
+def delete_bids_file(db: Database, file_id: int, data_path: Path, deleteondisk: bool) -> bool:
     """Delete the image of a file on disk, plus its sidecars"""
 
     file = try_get_file_with_id(db, file_id)
