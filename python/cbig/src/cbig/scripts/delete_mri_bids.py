@@ -121,46 +121,45 @@ def main():
         cand_id = candidate.cand_id
 
         files = get_files_with_candidate_id(db, cand_id)
-        file_ids = [file.id for file in files]
-        print(f'Found {len(file_ids)} file(s) in the database for PSCID {pscid}')
+        print(f'Found {len(files)} file(s) in the database for PSCID {pscid}')
 
         # Per file: pic on disk -> parameter rows -> image on disk -> file row.
         # A DB step only runs if the disk step before it succeeded.
-        for file_id in file_ids:
-            vprint(f'\n--- File ID {file_id} ---')
+        for file in files:
+            vprint(f'\n--- File ID {file.id} --- {file.path.name} ---')
 
             # 1. Pic on disk
             try:
-                pic_ok = delete_pic(db, file_id, pics_path, deleteondisk)
+                pic_ok = delete_pic(db, file.id, pics_path, deleteondisk)
             except Exception as e:
-                print(f'Pic cleanup error for file {file_id}: {e}')
+                print(f'Pic cleanup error for file {file.id}: {e}')
                 pic_ok = False
 
             if not pic_ok:
-                print(f'Keeping all DB rows for file {file_id}, pic was not deleted')
+                print(f'Keeping all DB rows for file {file.id}, pic was not deleted')
                 continue
 
             # 2. Parameter rows
-            result = delete_file_parameters(db, file_id)
+            result = delete_file_parameters(db, file.id)
             n = result.rowcount
-            vprint(f'{n} parameter row(s) for file {file_id}')
+            vprint(f'{n} parameter row(s) for file {file.id}')
             deleted_params += n
 
             # 3. Image and sidecars on disk
             try:
-                image_ok = delete_bids_file(db, file_id, data_path, deleteondisk)
+                image_ok = delete_bids_file(db, file.id, data_path, deleteondisk)
             except Exception as e:
-                print(f'Image cleanup error for file {file_id}: {e}')
+                print(f'Image cleanup error for file {file.id}: {e}')
                 image_ok = False
 
             if not image_ok:
-                print(f'Keeping file row for file {file_id}, image was not deleted')
+                print(f'Keeping file row for file {file.id}, image was not deleted')
                 continue
 
             # 4. File row
-            result = delete_file_entry(db, file_id)
+            result = delete_file_entry(db, file.id)
             n = result.rowcount
-            vprint(f'{n} file row(s) for file {file_id}')
+            vprint(f'{n} file row(s) for file {file.id}')
             deleted_files += n
 
         # Participant-level BIDS cleanup, runs even if no files were found in the database
