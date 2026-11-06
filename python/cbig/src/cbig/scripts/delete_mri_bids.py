@@ -77,7 +77,7 @@ def main():
     pscid = args.pscid
     project_folder = args.project_bids_dir
     confirm = args.confirm
-    deleteondisk = args.delete_on_disk
+    delete_on_disk = args.delete_on_disk
     verbose = args.verbose
 
     # Environment and database
@@ -86,7 +86,7 @@ def main():
     db = env.db
 
     # Using only one of the two flags would leave the disk and the database out of sync
-    if confirm != deleteondisk:
+    if confirm != delete_on_disk:
         log_error_exit(
             env,
             "--confirm and --delete-on-disk must be used together (or neither, for a trial run)",
@@ -130,7 +130,7 @@ def main():
 
             # 1. Pic on disk
             try:
-                pic_ok = delete_pic(db, file.id, pics_path, deleteondisk)
+                pic_ok = delete_pic(db, file.id, pics_path, delete_on_disk)
             except Exception as e:
                 print(f'Pic cleanup error for file {file.id}: {e}')
                 pic_ok = False
@@ -147,7 +147,7 @@ def main():
 
             # 3. Image and sidecars on disk
             try:
-                image_ok = delete_bids_file(db, file.id, data_path, deleteondisk)
+                image_ok = delete_bids_file(db, file.id, data_path, delete_on_disk)
             except Exception as e:
                 print(f'Image cleanup error for file {file.id}: {e}')
                 image_ok = False
@@ -165,17 +165,17 @@ def main():
         # Participant-level BIDS cleanup, runs even if no files were found in the database
         vprint(f'\n--- BIDS folders for sub-{pscid} in {bids_path} ---')
         try:
-            delete_dirs(bids_path, pscid, deleteondisk)
+            delete_dirs(bids_path, pscid, delete_on_disk)
         except Exception as e:
             print(f'BIDS folder cleanup failed: {e}. Continuing.')
 
         try:
-            delete_participant_tsv_line(bids_path, pscid, deleteondisk)
+            delete_participant_tsv_line(bids_path, pscid, delete_on_disk)
         except Exception as e:
             print(f'participants.tsv cleanup failed: {e}. Continuing.')
 
         # Disk summary
-        verb = 'deleted' if deleteondisk else 'would be deleted'
+        verb = 'deleted' if delete_on_disk else 'would be deleted'
         print(f'\nDisk: {disk_counts["images"]} image(s), {disk_counts["sidecars"]} sidecar(s), '
               f'{disk_counts["pics"]} pic(s), {disk_counts["folders"]} empty folder(s) {verb}')
         if disk_counts['missing']:
@@ -205,7 +205,7 @@ def main():
 # and False only when an actual deletion failed.
 # -------------------------------------------------------------------------------------------------
 
-def delete_pic(db: Database, file_id: int, pics_path: Path, deleteondisk: bool) -> bool:
+def delete_pic(db: Database, file_id: int, pics_path: Path, delete_on_disk: bool) -> bool:
     """Delete the check pic of a file, found in the parameter_file table"""
 
     parameter = try_get_parameter_value_with_file_id_parameter_name(
@@ -218,7 +218,7 @@ def delete_pic(db: Database, file_id: int, pics_path: Path, deleteondisk: bool) 
 
     if not full_path.is_file():
         vprint(f'{full_path} not found on disk, continuing')
-    elif deleteondisk:
+    elif delete_on_disk:
         try:
             full_path.unlink()
             vprint(f'Deleted {full_path}')
@@ -230,11 +230,11 @@ def delete_pic(db: Database, file_id: int, pics_path: Path, deleteondisk: bool) 
         vprint(f'Would delete {full_path}')
         disk_counts['pics'] += 1
 
-    delete_dir_if_empty(full_path.parent, deleteondisk)
+    delete_dir_if_empty(full_path.parent, delete_on_disk)
     return True
 
 
-def delete_bids_file(db: Database, file_id: int, data_path: Path, deleteondisk: bool) -> bool:
+def delete_bids_file(db: Database, file_id: int, data_path: Path, delete_on_disk: bool) -> bool:
     """Delete the image of a file on disk, plus its sidecars"""
 
     file = try_get_file_with_id(db, file_id)
@@ -248,7 +248,7 @@ def delete_bids_file(db: Database, file_id: int, data_path: Path, deleteondisk: 
     if not full_path.is_file():
         vprint(f'{full_path} not found on disk, continuing')
         disk_counts['missing'] += 1
-    elif deleteondisk:
+    elif delete_on_disk:
         try:
             full_path.unlink()
             vprint(f'Deleted {full_path}')
@@ -261,13 +261,13 @@ def delete_bids_file(db: Database, file_id: int, data_path: Path, deleteondisk: 
         disk_counts['images'] += 1
 
     # Sidecars may still exist even when the image itself is gone
-    if not delete_sidecars(full_path, deleteondisk):
+    if not delete_sidecars(full_path, delete_on_disk):
         ok = False
 
     return ok
 
 
-def delete_sidecars(image_path: Path, deleteondisk: bool) -> bool:
+def delete_sidecars(image_path: Path, delete_on_disk: bool) -> bool:
     """Delete the sidecar files (json, bval, bvec) next to a NIfTI image"""
 
     name = image_path.name
@@ -284,7 +284,7 @@ def delete_sidecars(image_path: Path, deleteondisk: bool) -> bool:
         if not sidecar.is_file():
             continue
 
-        if deleteondisk:
+        if delete_on_disk:
             try:
                 sidecar.unlink()
                 vprint(f'Deleted {sidecar}')
@@ -299,7 +299,7 @@ def delete_sidecars(image_path: Path, deleteondisk: bool) -> bool:
     return ok
 
 
-def delete_dirs(bids_path: Path, pscid: str, deleteondisk: bool):
+def delete_dirs(bids_path: Path, pscid: str, delete_on_disk: bool):
     """Delete MRI modality, session and subject dirs for a participant if they are empty"""
 
     subject_dir = bids_path / f"sub-{pscid.removeprefix('sub-')}"
@@ -312,14 +312,14 @@ def delete_dirs(bids_path: Path, pscid: str, deleteondisk: bool):
 
     for session_dir in subject_dir.glob('ses-*'):
         for modality in modalities:
-            delete_dir_if_empty(session_dir / modality, deleteondisk)
+            delete_dir_if_empty(session_dir / modality, delete_on_disk)
 
-        delete_dir_if_empty(session_dir, deleteondisk)
+        delete_dir_if_empty(session_dir, delete_on_disk)
 
-    delete_dir_if_empty(subject_dir, deleteondisk)
+    delete_dir_if_empty(subject_dir, delete_on_disk)
 
 
-def delete_dir_if_empty(folder_path: Path, deleteondisk: bool):
+def delete_dir_if_empty(folder_path: Path, delete_on_disk: bool):
     """Delete the folder if it exists and is empty"""
 
     if not folder_path.is_dir():
@@ -329,7 +329,7 @@ def delete_dir_if_empty(folder_path: Path, deleteondisk: bool):
         vprint(f'Not deleting {folder_path}, folder is not empty')
         return
 
-    if deleteondisk:
+    if delete_on_disk:
         try:
             folder_path.rmdir()
             vprint(f'Deleted empty folder {folder_path}')
@@ -341,7 +341,7 @@ def delete_dir_if_empty(folder_path: Path, deleteondisk: bool):
     disk_counts['folders'] += 1
 
 
-def delete_participant_tsv_line(bids_path: Path, pscid: str, deleteondisk: bool):
+def delete_participant_tsv_line(bids_path: Path, pscid: str, delete_on_disk: bool):
     """Remove a participant's row from participants.tsv"""
 
     tsv_path = bids_path / 'participants.tsv'
@@ -358,7 +358,7 @@ def delete_participant_tsv_line(bids_path: Path, pscid: str, deleteondisk: bool)
         print(f'sub-{participant_id} not found in participants.tsv')
         return
 
-    if not deleteondisk:
+    if not delete_on_disk:
         print(f'Would remove sub-{participant_id} from participants.tsv')
         return
 
