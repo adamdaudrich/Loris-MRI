@@ -1,27 +1,24 @@
-from typing import Any
 import argparse
 import sys
 from collections import Counter
 from pathlib import Path
-from sqlalchemy.orm import Session as Database
+from typing import Any
 
+# cbig specific queries
+from cbig.database.queries.file import delete_file_entry, get_files_with_candidate_id
+from cbig.database.queries.file_parameter import delete_file_parameters
 from lib.config import get_data_dir_path_config
 from lib.config_file import load_config
 from lib.db.queries.candidate import try_get_candidate_with_psc_id
-
-from lib.logging import log_error_exit
-
-#cbig specific queries
-from cbig.database.queries.file import delete_file_entry, get_files_with_candidate_id
-from cbig.database.queries.file_parameter import delete_file_parameters
-
 from lib.db.queries.file import try_get_file_with_id
 from lib.db.queries.file_parameter import (
     try_get_parameter_value_with_file_id_parameter_name,
 )
 from lib.exitcode import INVALID_ARG
+from lib.logging import log_error_exit
 from lib.make_env import make_env
 from loris_bids_utils.files.participants import BidsParticipantsTsvFile
+from sqlalchemy.orm import Session as Database
 
 # Set from --verbose in main(). When False, only summaries and errors are printed.
 verbose = False
@@ -34,6 +31,7 @@ def vprint(*args: Any, **kwargs: Any):
     """Print only when --verbose is set"""
     if verbose:
         print(*args, **kwargs)
+
 
 def main():
     global verbose
@@ -86,7 +84,7 @@ def main():
     config_file = load_config(args.profile)
     env = make_env('delete_mri_bids', {}, config_file, args.verbose)
     db = env.db
-    
+
     # Using only one of the two flags would leave the disk and the database out of sync
     if confirm != deleteondisk:
         log_error_exit(
@@ -94,7 +92,6 @@ def main():
             "--confirm and --deleteondisk must be used together (or neither, for a trial run)",
             INVALID_ARG,
         )
-
 
     # Paths
     data_path = Path(get_data_dir_path_config(env))

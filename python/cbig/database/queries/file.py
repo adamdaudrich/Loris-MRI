@@ -1,12 +1,11 @@
 from collections.abc import Sequence
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, select
-from sqlalchemy.orm import Session as Database
-
 from lib.db.models.candidate import DbCandidate
 from lib.db.models.file import DbFile
 from lib.db.models.session import DbSession
+from sqlalchemy import CursorResult, delete, select
+from sqlalchemy.orm import Session as Database
 
 
 def delete_file_entry(db: Database, file_id: int):
@@ -16,6 +15,7 @@ def delete_file_entry(db: Database, file_id: int):
 
     return cast(CursorResult[Any], db.execute(delete(DbFile)
         .where(DbFile.id == file_id)))
+
 
 def get_files_with_candidate_id(db: Database, candidate_id: int) -> Sequence[DbFile]:
     """

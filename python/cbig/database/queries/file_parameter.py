@@ -1,9 +1,8 @@
-from sqlalchemy import delete, select, CursorResult
-from sqlalchemy.orm import Session as Database
 from typing import Any, cast
 
 from lib.db.models.file_parameter import DbFileParameter
-from lib.db.models.parameter_type import DbParameterType
+from sqlalchemy import CursorResult, delete
+from sqlalchemy.orm import Session as Database
 
 
 def delete_file_parameters(db: Database, file_id: int) -> CursorResult[Any]:
