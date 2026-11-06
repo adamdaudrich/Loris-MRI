@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select, CursorResult
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as Database
 
 from lib.db.models.file_parameter import DbFileParameter
@@ -12,6 +12,7 @@ def delete_file_parameter(db: Database, file_parameter_id: int):
 
     return db.execute(delete(DbFileParameter)
         .where(DbFileParameter.id == file_parameter_id))
+
 
 def try_get_parameter_value_with_file_id_parameter_name(
     db: Database,

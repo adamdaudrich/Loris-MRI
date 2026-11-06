@@ -1,17 +1,12 @@
 from pathlib import Path
 
-from typing import Any, cast
-
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as Database
-from sqlalchemy import CursorResult
 
 from lib.db.models.file import DbFile
-from lib.db.models.candidate import DbCandidate
-from lib.db.models.session import DbSession
 from lib.db.models.file_parameter import DbFileParameter
 from lib.db.models.parameter_type import DbParameterType
-from collections.abc import Sequence
+
 
 def try_get_file_with_unique_combination(
     db: Database,
@@ -54,6 +49,7 @@ def try_get_file_with_path(db: Database, path: Path) -> DbFile | None:
         .where(DbFile.path == path)
     ).scalar_one_or_none()
 
+
 def try_get_file_with_hash(db: Database, file_hash: str) -> DbFile | None:
     """
     Get an imaging file from the database using its BLAKE2b or MD5 hash, or return `None` if no
@@ -65,6 +61,7 @@ def try_get_file_with_hash(db: Database, file_hash: str) -> DbFile | None:
         .where(DbParameterType.name.in_(['file_blake2b_hash', 'md5hash']))
         .where(DbFileParameter.value == file_hash)
     ).scalar_one_or_none()
+
 
 def delete_file(db: Database, file_id: int):
     """
