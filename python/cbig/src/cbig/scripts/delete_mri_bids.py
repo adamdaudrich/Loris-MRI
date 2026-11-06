@@ -38,7 +38,7 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Delete database entries, niftis, sidecars, and pics for a given candidate. "
-                    "Run without --confirm and --deleteondisk first for a trial run."
+                    "Run without --confirm and --delete-on-disk first for a trial run."
     )
     parser.add_argument(
         '-p', '--profile',
@@ -51,7 +51,7 @@ def main():
         help="The PSCID associated with the candidate's data you wish to delete"
     )
     parser.add_argument(
-        '-f', '--project_bids_dir',
+        '-f', '--project-bids-dir',
         type=str,
         required=True,
         help="Name of the directory containing the CBIGR project's bids"
@@ -59,10 +59,10 @@ def main():
     parser.add_argument(
         '-c', '--confirm',
         action='store_true',
-        help="Commits database entry deletion (must be used with --deleteondisk)"
+        help="Commits database entry deletion (must be used with --delete-on-disk)"
     )
     parser.add_argument(
-        '-d', '--deleteondisk',
+        '-d', '--delete-on-disk',
         action='store_true',
         help="Deletes targeted file(s) on disk (must be used with --confirm)"
     )
@@ -77,7 +77,7 @@ def main():
     pscid = args.pscid
     project_folder = args.project_bids_dir
     confirm = args.confirm
-    deleteondisk = args.deleteondisk
+    deleteondisk = args.delete_on_disk
     verbose = args.verbose
 
     # Environment and database
@@ -89,7 +89,7 @@ def main():
     if confirm != deleteondisk:
         log_error_exit(
             env,
-            "--confirm and --deleteondisk must be used together (or neither, for a trial run)",
+            "--confirm and --delete-on-disk must be used together (or neither, for a trial run)",
             INVALID_ARG,
         )
 
@@ -99,7 +99,7 @@ def main():
     bids_path = data_path / 'bids_imports' / project_folder
 
     if not bids_path.is_dir():
-        print(f'{bids_path} does not exist. Check --project_bids_dir')
+        print(f'{bids_path} does not exist. Check --project-bids-dir')
         sys.exit(INVALID_ARG)
 
     if not confirm:
@@ -193,7 +193,7 @@ def main():
         else:
             db.rollback()
             print(f'Database (trial run): {deleted_files} file row(s) and {deleted_params} '
-                  f'parameter row(s) would be deleted. Use --confirm --deleteondisk to delete.')
+                  f'parameter row(s) would be deleted. Use --confirm --delete-on-disk to delete.')
     except Exception:
         db.rollback()
         raise
