@@ -94,7 +94,7 @@ def main():
         )
 
     # Paths
-    data_path = Path(get_data_dir_path_config(env))
+    data_path = get_data_dir_path_config(env)
     pics_path = data_path / 'pic'
     bids_path = data_path / 'bids_imports' / project_folder
 
